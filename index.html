@@ -1,569 +1,276 @@
-import React, { useState } from 'react';
-import { Download, Plus, X, Copy, RotateCcw } from 'lucide-react';
-
-const VOInvoiceGenerator = () => {
-  const today = new Date().toISOString().split('T')[0];
-  const defaultDueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-  // Initial state with default values
-  const [invoice, setInvoice] = useState({
-    invoiceNumber: 'INV-001',
-    date: today,
-    dueDate: defaultDueDate,
-    clientName: '',
-    clientAddress: '',
-    projectName: '',
-    talentName: '',
-    talentAddress: '',
-    
-    // VO-specific toggles
-    usageRights: {
-      enabled: false,
-      web: false,
-      tv: false,
-      radio: false,
-      internal: false,
-      social: false,
-      broadcast: false
-    },
-    buyout: {
-      enabled: false,
-      amount: 0
-    },
-    splitBilling: {
-      enabled: false,
-      splits: [{ name: '', amount: 0 }]
-    },
-    latePaymentNote: false,
-    usageActivationNote: false,
-    
-    // Custom line items
-    lineItems: [{ label: 'Voice-Over Recording', amount: 0 }],
-    
-    // Notes section
-    notes: 'Payment due within 30 days.\nPlease make checks payable to the talent name above.\nThank you for your business!'
-  });
-
-  // Update basic field
-  const updateField = (field, value) => {
-    setInvoice(prev => ({ ...prev, [field]: value }));
-  };
-
-  // Toggle usage right
-  const toggleUsageRight = (right) => {
-    setInvoice(prev => ({
-      ...prev,
-      usageRights: {
-        ...prev.usageRights,
-        [right]: !prev.usageRights[right]
-      }
-    }));
-  };
-
-  // Add line item
-  const addLineItem = () => {
-    setInvoice(prev => ({
-      ...prev,
-      lineItems: [...prev.lineItems, { label: '', amount: 0 }]
-    }));
-  };
-
-  // Update line item
-  const updateLineItem = (index, field, value) => {
-    setInvoice(prev => ({
-      ...prev,
-      lineItems: prev.lineItems.map((item, i) => 
-        i === index ? { ...item, [field]: value } : item
-      )
-    }));
-  };
-
-  // Remove line item
-  const removeLineItem = (index) => {
-    if (invoice.lineItems.length > 1) {
-      setInvoice(prev => ({
-        ...prev,
-        lineItems: prev.lineItems.filter((_, i) => i !== index)
-      }));
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VO Invoice Generator</title>
+  <style>
+    /* ====== Basic Styles ====== */
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 0;
     }
-  };
-
-  // Add split
-  const addSplit = () => {
-    setInvoice(prev => ({
-      ...prev,
-      splitBilling: {
-        ...prev.splitBilling,
-        splits: [...prev.splitBilling.splits, { name: '', amount: 0 }]
-      }
-    }));
-  };
-
-  // Update split
-  const updateSplit = (index, field, value) => {
-    setInvoice(prev => ({
-      ...prev,
-      splitBilling: {
-        ...prev.splitBilling,
-        splits: prev.splitBilling.splits.map((split, i) => 
-          i === index ? { ...split, [field]: value } : split
-        )
-      }
-    }));
-  };
-
-  // Remove split
-  const removeSplit = (index) => {
-    if (invoice.splitBilling.splits.length > 1) {
-      setInvoice(prev => ({
-        ...prev,
-        splitBilling: {
-          ...prev.splitBilling,
-          splits: prev.splitBilling.splits.filter((_, i) => i !== index)
-        }
-      }));
+    .container {
+      max-width: 900px;
+      margin: 20px auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
-  };
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    input, select, textarea, button {
+      width: 100%;
+      padding: 8px 10px;
+      margin: 5px 0 15px 0;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    label {
+      font-weight: bold;
+      display: block;
+      margin-bottom: 5px;
+    }
+    .flex-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .flex-row > div {
+      flex: 1;
+      min-width: 150px;
+    }
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .custom-items {
+      margin-bottom: 15px;
+    }
+    .custom-item {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 5px;
+    }
+    .custom-item input {
+      flex: 1;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    .invoice-preview {
+      border-top: 2px dashed #ccc;
+      padding-top: 15px;
+      margin-top: 20px;
+    }
+    .invoice-preview h2 {
+      margin-top: 0;
+    }
+    @media(max-width: 600px){
+      .flex-row {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Voice-Over Invoice Generator</h1>
 
-  // Calculate totals
-  const calculateSubtotal = () => {
-    const lineItemsTotal = invoice.lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
-    const buyoutTotal = invoice.buyout.enabled ? (parseFloat(invoice.buyout.amount) || 0) : 0;
-    return lineItemsTotal + buyoutTotal;
-  };
+    <!-- ===== Invoice Basics ===== -->
+    <div>
+      <label>Client Name</label>
+      <input type="text" id="clientName" placeholder="Enter client name">
 
-  const subtotal = calculateSubtotal();
+      <label>Project Name</label>
+      <input type="text" id="projectName" placeholder="Enter project name">
 
-  // Duplicate invoice
-  const duplicateInvoice = () => {
-    const newNumber = `INV-${String(parseInt(invoice.invoiceNumber.split('-')[1]) + 1).padStart(3, '0')}`;
-    setInvoice(prev => ({
-      ...prev,
-      invoiceNumber: newNumber,
-      date: today,
-      dueDate: defaultDueDate
-    }));
-  };
+      <div class="flex-row">
+        <div>
+          <label>Invoice Date</label>
+          <input type="date" id="invoiceDate">
+        </div>
+        <div>
+          <label>Due Date</label>
+          <input type="date" id="dueDate">
+        </div>
+      </div>
+    </div>
 
-  // Reset invoice
-  const resetInvoice = () => {
-    if (confirm('Are you sure you want to reset the invoice? This cannot be undone.')) {
-      setInvoice({
-        invoiceNumber: 'INV-001',
-        date: today,
-        dueDate: defaultDueDate,
-        clientName: '',
-        clientAddress: '',
-        projectName: '',
-        talentName: '',
-        talentAddress: '',
-        usageRights: {
-          enabled: false,
-          web: false,
-          tv: false,
-          radio: false,
-          internal: false,
-          social: false,
-          broadcast: false
+    <!-- ===== VO-specific Toggles ===== -->
+    <div>
+      <h3>VO Options</h3>
+      <label class="toggle-label">
+        <input type="checkbox" id="usageRightsToggle">
+        Usage Rights (web, TV, radio, internal)
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" id="buyoutToggle">
+        Buyout Option
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" id="splitBillingToggle">
+        Split Billing
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" id="latePaymentToggle">
+        Late Payment / Usage Activation Note
+      </label>
+    </div>
+
+    <!-- ===== Custom Line Items ===== -->
+    <div class="custom-items">
+      <h3>Custom Line Items</h3>
+      <div id="itemsContainer"></div>
+      <button type="button" onclick="addItem()">+ Add Item</button>
+    </div>
+
+    <!-- ===== Notes / Clauses ===== -->
+    <div>
+      <label>Notes / Clauses</label>
+      <textarea id="notes" rows="4" placeholder="Enter any notes or clauses here..."></textarea>
+    </div>
+
+    <!-- ===== Actions ===== -->
+    <div class="flex-row">
+      <button onclick="generateInvoice()">Generate Invoice</button>
+      <button onclick="resetInvoice()" style="background:#f44336">Reset</button>
+      <button onclick="duplicateInvoice()" style="background:#2196F3">Duplicate</button>
+    </div>
+
+    <!-- ===== Invoice Preview ===== -->
+    <div class="invoice-preview" id="invoicePreview"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+    // ===== Global Items Array =====
+    let items = [];
+
+    // ===== Add a new custom line item =====
+    function addItem(label='', amount=''){
+      const container = document.getElementById('itemsContainer');
+      const div = document.createElement('div');
+      div.className = 'custom-item';
+      div.innerHTML = `
+        <input type="text" placeholder="Item label" value="${label}" oninput="updateItemLabel(this)">
+        <input type="number" placeholder="Amount" value="${amount}" oninput="updateItemAmount(this)">
+        <button type="button" onclick="removeItem(this)">Remove</button>
+      `;
+      container.appendChild(div);
+      items.push({label, amount});
+    }
+
+    function updateItemLabel(input){
+      const index = [...input.parentNode.parentNode.children].indexOf(input.parentNode);
+      items[index].label = input.value;
+    }
+    function updateItemAmount(input){
+      const index = [...input.parentNode.parentNode.children].indexOf(input.parentNode);
+      items[index].amount = parseFloat(input.value) || 0;
+    }
+    function removeItem(btn){
+      const container = document.getElementById('itemsContainer');
+      const index = [...container.children].indexOf(btn.parentNode);
+      items.splice(index,1);
+      container.removeChild(btn.parentNode);
+    }
+
+    // ===== Generate Invoice =====
+    function generateInvoice(){
+      const clientName = document.getElementById('clientName').value;
+      const projectName = document.getElementById('projectName').value;
+      const invoiceDate = document.getElementById('invoiceDate').value;
+      const dueDate = document.getElementById('dueDate').value;
+
+      const usageRights = document.getElementById('usageRightsToggle').checked ? 'Yes' : 'No';
+      const buyout = document.getElementById('buyoutToggle').checked ? 'Yes' : 'No';
+      const splitBilling = document.getElementById('splitBillingToggle').checked;
+      const latePayment = document.getElementById('latePaymentToggle').checked ? 'Please pay before usage activation.' : '';
+
+      const notes = document.getElementById('notes').value;
+
+      // Calculate totals
+      let total = 0;
+      items.forEach(item => total += parseFloat(item.amount) || 0);
+
+      // Build invoice HTML
+      let html = `<h2>Invoice</h2>
+                  <p><strong>Client:</strong> ${clientName}</p>
+                  <p><strong>Project:</strong> ${projectName}</p>
+                  <p><strong>Invoice Date:</strong> ${invoiceDate}</p>
+                  <p><strong>Due Date:</strong> ${dueDate}</p>
+                  <h3>VO Options</h3>
+                  <p>Usage Rights: ${usageRights}</p>
+                  <p>Buyout Option: ${buyout}</p>
+                  <p>Split Billing: ${splitBilling ? 'Enabled' : 'No'}</p>
+                  <p style="color:red">${latePayment}</p>
+                  <h3>Line Items</h3>
+                  <ul>`;
+      items.forEach(item => html += `<li>${item.label}: $${item.amount}</li>`);
+      html += `</ul>
+               <h3>Total: $${total}</h3>
+               <h3>Notes / Clauses</h3>
+               <p>${notes}</p>
+               <button onclick="downloadPDF()" style="margin-top:10px;">Download PDF</button>`;
+
+      document.getElementById('invoicePreview').innerHTML = html;
+    }
+
+    // ===== Reset Invoice =====
+    function resetInvoice(){
+      document.getElementById('clientName').value = '';
+      document.getElementById('projectName').value = '';
+      document.getElementById('invoiceDate').value = '';
+      document.getElementById('dueDate').value = '';
+      document.getElementById('usageRightsToggle').checked = false;
+      document.getElementById('buyoutToggle').checked = false;
+      document.getElementById('splitBillingToggle').checked = false;
+      document.getElementById('latePaymentToggle').checked = false;
+      document.getElementById('notes').value = '';
+      document.getElementById('itemsContainer').innerHTML = '';
+      items = [];
+      document.getElementById('invoicePreview').innerHTML = '';
+    }
+
+    // ===== Duplicate Invoice =====
+    function duplicateInvoice(){
+      const html = document.getElementById('invoicePreview').innerHTML;
+      if(html) document.getElementById('invoicePreview').innerHTML += '<hr>' + html;
+    }
+
+    // ===== Download PDF =====
+    function downloadPDF(){
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.html(document.getElementById('invoicePreview'), {
+        callback: function(pdf){
+          pdf.save('invoice.pdf');
         },
-        buyout: {
-          enabled: false,
-          amount: 0
-        },
-        splitBilling: {
-          enabled: false,
-          splits: [{ name: '', amount: 0 }]
-        },
-        latePaymentNote: false,
-        usageActivationNote: false,
-        lineItems: [{ label: 'Voice-Over Recording', amount: 0 }],
-        notes: 'Payment due within 30 days.\nPlease make checks payable to the talent name above.\nThank you for your business!'
+        x:10,
+        y:10,
+        width:180
       });
     }
-  };
 
-  // Generate PDF (using print functionality)
-  const generatePDF = () => {
-    window.print();
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-8">
-      {/* Action Buttons - Hidden in print */}
-      <div className="max-w-4xl mx-auto mb-6 flex flex-wrap gap-3 print:hidden">
-        <button
-          onClick={generatePDF}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-        >
-          <Download size={18} />
-          Download PDF
-        </button>
-        <button
-          onClick={duplicateInvoice}
-          className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
-        >
-          <Copy size={18} />
-          Duplicate
-        </button>
-        <button
-          onClick={resetInvoice}
-          className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition"
-        >
-          <RotateCcw size={18} />
-          Reset
-        </button>
-      </div>
-
-      {/* Invoice Container */}
-      <div className="max-w-4xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-8">
-          <h1 className="text-4xl font-bold mb-2">INVOICE</h1>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            <div>
-              <label className="block text-blue-100 text-sm mb-1">Invoice Number</label>
-              <input
-                type="text"
-                value={invoice.invoiceNumber}
-                onChange={(e) => updateField('invoiceNumber', e.target.value)}
-                className="w-full px-3 py-2 rounded bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-            </div>
-            <div>
-              <label className="block text-blue-100 text-sm mb-1">Date</label>
-              <input
-                type="date"
-                value={invoice.date}
-                onChange={(e) => updateField('date', e.target.value)}
-                className="w-full px-3 py-2 rounded bg-white/20 text-white border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div className="p-8">
-          {/* Talent & Client Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div>
-              <h3 className="font-semibold text-lg mb-3 text-gray-800">From (Talent)</h3>
-              <input
-                type="text"
-                placeholder="Your Name"
-                value={invoice.talentName}
-                onChange={(e) => updateField('talentName', e.target.value)}
-                className="w-full px-3 py-2 mb-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <textarea
-                placeholder="Your Address"
-                value={invoice.talentAddress}
-                onChange={(e) => updateField('talentAddress', e.target.value)}
-                rows="3"
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <h3 className="font-semibold text-lg mb-3 text-gray-800">Bill To (Client)</h3>
-              <input
-                type="text"
-                placeholder="Client Name"
-                value={invoice.clientName}
-                onChange={(e) => updateField('clientName', e.target.value)}
-                className="w-full px-3 py-2 mb-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <textarea
-                placeholder="Client Address"
-                value={invoice.clientAddress}
-                onChange={(e) => updateField('clientAddress', e.target.value)}
-                rows="3"
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Project & Due Date */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div>
-              <label className="block font-semibold mb-2 text-gray-700">Project Name</label>
-              <input
-                type="text"
-                placeholder="e.g., Commercial - Product Launch"
-                value={invoice.projectName}
-                onChange={(e) => updateField('projectName', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold mb-2 text-gray-700">Due Date</label>
-              <input
-                type="date"
-                value={invoice.dueDate}
-                onChange={(e) => updateField('dueDate', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* VO-Specific Toggles */}
-          <div className="mb-8 p-6 bg-blue-50 rounded-lg">
-            <h3 className="font-semibold text-lg mb-4 text-gray-800">Voice-Over Specific Options</h3>
-            
-            {/* Usage Rights */}
-            <div className="mb-4">
-              <label className="flex items-center gap-2 mb-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={invoice.usageRights.enabled}
-                  onChange={(e) => setInvoice(prev => ({
-                    ...prev,
-                    usageRights: { ...prev.usageRights, enabled: e.target.checked }
-                  }))}
-                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                />
-                <span className="font-semibold">Usage Rights Included</span>
-              </label>
-              
-              {invoice.usageRights.enabled && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 ml-7">
-                  {['web', 'tv', 'radio', 'internal', 'social', 'broadcast'].map(right => (
-                    <label key={right} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={invoice.usageRights[right]}
-                        onChange={() => toggleUsageRight(right)}
-                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                      />
-                      <span className="capitalize text-sm">{right}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Buyout */}
-            <div className="mb-4">
-              <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={invoice.buyout.enabled}
-                  onChange={(e) => setInvoice(prev => ({
-                    ...prev,
-                    buyout: { ...prev.buyout, enabled: e.target.checked }
-                  }))}
-                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                />
-                <span className="font-semibold">Buyout</span>
-              </label>
-              
-              {invoice.buyout.enabled && (
-                <div className="ml-7">
-                  <input
-                    type="number"
-                    placeholder="Buyout amount"
-                    value={invoice.buyout.amount || ''}
-                    onChange={(e) => setInvoice(prev => ({
-                      ...prev,
-                      buyout: { ...prev.buyout, amount: e.target.value }
-                    }))}
-                    className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Split Billing */}
-            <div className="mb-4">
-              <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={invoice.splitBilling.enabled}
-                  onChange={(e) => setInvoice(prev => ({
-                    ...prev,
-                    splitBilling: { ...prev.splitBilling, enabled: e.target.checked }
-                  }))}
-                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                />
-                <span className="font-semibold">Split Billing</span>
-              </label>
-              
-              {invoice.splitBilling.enabled && (
-                <div className="ml-7 space-y-2">
-                  {invoice.splitBilling.splits.map((split, idx) => (
-                    <div key={idx} className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Talent/Studio name"
-                        value={split.name}
-                        onChange={(e) => updateSplit(idx, 'name', e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <input
-                        type="number"
-                        placeholder="Amount"
-                        value={split.amount || ''}
-                        onChange={(e) => updateSplit(idx, 'amount', e.target.value)}
-                        className="w-32 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      {invoice.splitBilling.splits.length > 1 && (
-                        <button
-                          onClick={() => removeSplit(idx)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded"
-                        >
-                          <X size={20} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <button
-                    onClick={addSplit}
-                    className="text-blue-600 text-sm hover:underline"
-                  >
-                    + Add Split
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Notes Toggles */}
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={invoice.latePaymentNote}
-                  onChange={(e) => updateField('latePaymentNote', e.target.checked)}
-                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                />
-                <span className="font-semibold">Include Late Payment Terms</span>
-              </label>
-              
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={invoice.usageActivationNote}
-                  onChange={(e) => updateField('usageActivationNote', e.target.checked)}
-                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                />
-                <span className="font-semibold">Include Usage Activation Notice</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Line Items */}
-          <div className="mb-8">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold text-lg text-gray-800">Line Items</h3>
-              <button
-                onClick={addLineItem}
-                className="flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm"
-              >
-                <Plus size={16} />
-                Add Item
-              </button>
-            </div>
-            
-            <div className="space-y-3">
-              {invoice.lineItems.map((item, idx) => (
-                <div key={idx} className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Description"
-                    value={item.label}
-                    onChange={(e) => updateLineItem(idx, 'label', e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-600">$</span>
-                    <input
-                      type="number"
-                      placeholder="0.00"
-                      value={item.amount || ''}
-                      onChange={(e) => updateLineItem(idx, 'amount', e.target.value)}
-                      className="w-32 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  {invoice.lineItems.length > 1 && (
-                    <button
-                      onClick={() => removeLineItem(idx)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded"
-                    >
-                      <X size={20} />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Total */}
-          <div className="mb-8 flex justify-end">
-            <div className="w-full md:w-64">
-              <div className="flex justify-between py-2 text-lg font-semibold border-t-2 border-gray-800">
-                <span>TOTAL:</span>
-                <span>${subtotal.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Split Billing Display */}
-          {invoice.splitBilling.enabled && invoice.splitBilling.splits.some(s => s.name) && (
-            <div className="mb-8 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
-              <h4 className="font-semibold mb-2 text-gray-800">Payment Split:</h4>
-              {invoice.splitBilling.splits.map((split, idx) => (
-                split.name && (
-                  <div key={idx} className="flex justify-between text-sm">
-                    <span>{split.name}</span>
-                    <span className="font-semibold">${parseFloat(split.amount || 0).toFixed(2)}</span>
-                  </div>
-                )
-              ))}
-            </div>
-          )}
-
-          {/* Notes Section */}
-          <div className="mb-8">
-            <h3 className="font-semibold text-lg mb-3 text-gray-800">Notes & Terms</h3>
-            <textarea
-              value={invoice.notes}
-              onChange={(e) => updateField('notes', e.target.value)}
-              rows="5"
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            
-            {/* Conditional Notes */}
-            {invoice.latePaymentNote && (
-              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-sm">
-                <strong>Late Payment:</strong> A fee of 1.5% per month will be charged on overdue balances.
-              </div>
-            )}
-            
-            {invoice.usageActivationNote && (
-              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
-                <strong>Usage Activation:</strong> Usage rights become active upon full payment receipt.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="bg-gray-100 p-6 text-center text-sm text-gray-600">
-          Thank you for your business!
-        </div>
-      </div>
-
-      {/* Print Styles */}
-      <style>{`
-        @media print {
-          body {
-            margin: 0;
-            padding: 0;
-          }
-          .print\\:hidden {
-            display: none !important;
-          }
-        }
-      `}</style>
-    </div>
-  );
-};
-
-export default VOInvoiceGenerator;
+    // ===== Default Template Values =====
+    window.onload = () => {
+      addItem('Voice-over Recording', 200);
+      addItem('Editing & Processing', 50);
+    }
+  </script>
+</body>
+</html>
