@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Actor Invoice Generator</title>
+  <!-- React & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f9f9f9; margin: 0; padding: 0; }
+    .container { max-width: 900px; margin: 40px auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    h1,h2,h3 { color: #333; }
+    input, select, textarea { width: 100%; padding: 8px; margin: 4px 0 12px; border: 1px solid #ccc; border-radius: 4px; }
+    button { padding: 10px 16px; border: none; border-radius: 4px; background: #4f46e5; color: white; cursor: pointer; }
+    button:hover { background: #4338ca; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { padding: 8px; border: 1px solid #ddd; }
+    th { background: #4f46e5; color: white; }
+    .totals { text-align: right; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+
+    const { useState, useEffect } = React;
+
+    // ====== CHANGE THESE WITH YOUR REAL SUPABASE KEYS ======
+    const SUPABASE_URL = "https://your-supabase-url.supabase.co";
+    const SUPABASE_ANON_KEY = "your-anon-key";
+    // ========================================================
+
+    // Load Supabase
+    const { createClient } = supabase;
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    function App() {
+      const [user, setUser] = useState(null);
+      const [email, setEmail] = useState("");
+      const [password, setPassword] = useState("");
+      const [invoices, setInvoices] = useState([]);
+      const [editing, setEditing] = useState(null);
+      const [showUpgrade, setShowUpgrade] = useState(false);
+
+      // Auth listener
+      useEffect(() => {
+        const session = supabaseClient.auth.session();
+        setUser(session?.user ?? null);
+      }, []);
+
+      // Fetch invoices
+      const fetchInvoices = async () => {
+        if (!user) return;
+        const { data, error } = await supabaseClient
+          .from("invoices")
+          .select("*")
+          .eq("user_id", user.id);
+        if (error) console.log(error);
+        else setInvoices(data);
+      };
+
+      useEffect(() => {
+        if (user) fetchInvoices();
+      }, [user]);
+
+      // ===== Authentication =====
+      const signUp = async () => {
+        const { user: u, error } = await supabaseClient.auth.signUp({ email, password });
+        if (error) return alert(error.message);
+        setUser(u);
+        setEmail(""); setPassword("");
+        alert("Sign up successful!");
+      };
+
+      const signIn = async () => {
+        const { user: u, error } = await supabaseClient.auth.signIn({ email, password });
+        if (error) return alert(error.message);
+        setUser(u);
+        setEmail(""); setPassword("");
+      };
+
+      const signOut = async () => {
+        await supabaseClient.auth.signOut();
+        setUser(null);
+        setInvoices([]);
+      };
+
+      // ===== Invoice Functions =====
+      const startInvoice = () => {
+        // Free users can only create 2 invoices
+        if (!user.is_pro && invoices.length >= 2) { setShowUpgrade(true); return; }
+
+        setEditing({
+          id: Date.now(),
+          client_name: "",
+          client_email: "",
+          project: "",
+          rate: 0,
+          hours: 0,
+          extras: 0,
+          notes: "",
+          date: new Date().toISOString().split("T")[0]
+        });
+      };
+
+      const saveInvoice = async () => {
+        if (!editing) return;
+        const { data, error } = await supabaseClient
+          .from("invoices")
+          .insert([{ ...editing, user_id: user.id }]);
+        if (error) return alert(error.message);
+        setInvoices([...invoices, data[0]]);
+        setEditing(null);
+        alert("Invoice saved!");
+      };
+
+      const generatePDF = (invoice) => {
+        const win = window.open("", "", "width=800,height=600");
+        win.document.write(`
+          <html>
+          <head><title>Invoice</title></head>
+          <body>
+            <h1>Invoice for Voice Actor</h1>
+            <p><strong>Date:</strong> ${invoice.date}</p>
+            <p><strong>Client:</strong> ${invoice.client_name} (${invoice.client_email})</p>
+            <p><strong>Project:</strong> ${invoice.project}</p>
+            <table>
+              <thead><tr><th>Item</th><th>Amount</th></tr></thead>
+              <tbody>
+                <tr><td>Rate x Hours</td><td>$${invoice.rate * invoice.hours}</td></tr>
+                <tr><td>Extras</td><td>$${invoice.extras}</td></tr>
+              </tbody>
+            </table>
+            <h3>Total: $${invoice.rate * invoice.hours + invoice.extras}</h3>
+            ${invoice.notes ? `<p><strong>Notes:</strong> ${invoice.notes}</p>` : ""}
+          </body>
+          </html>
+        `);
+        win.document.close();
+        setTimeout(() => win.print(), 250);
+      };
+
+      // ===== Upgrade =====
+      const upgradeToPro = async () => {
+        // This would normally integrate with LemonSqueezy or Stripe
+        alert("Pro activated!");
+        setUser({ ...user, is_pro: true });
+        setShowUpgrade(false);
+      };
+
+      // ====== UI ======
+      if (!user) return (
+        <div className="container">
+          <h1>Voice Actor Invoice Generator</h1>
+          <input placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
+          <input placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} />
+          <button onClick={signIn}>Login</button>
+          <button onClick={signUp}>Sign Up</button>
+        </div>
+      );
+
+      if (editing) return (
+        <div className="container">
+          <h2>New Invoice</h2>
+          <input placeholder="Client Name" value={editing.client_name} onChange={e => setEditing({...editing, client_name: e.target.value})}/>
+          <input placeholder="Client Email" value={editing.client_email} onChange={e => setEditing({...editing, client_email: e.target.value})}/>
+          <input placeholder="Project" value={editing.project} onChange={e => setEditing({...editing, project: e.target.value})}/>
+          <input type="number" placeholder="Rate per hour" value={editing.rate} onChange={e => setEditing({...editing, rate: parseFloat(e.target.value) || 0})}/>
+          <input type="number" placeholder="Hours worked" value={editing.hours} onChange={e => setEditing({...editing, hours: parseFloat(e.target.value) || 0})}/>
+          <input type="number" placeholder="Extras" value={editing.extras} onChange={e => setEditing({...editing, extras: parseFloat(e.target.value) || 0})}/>
+          <textarea placeholder="Notes" value={editing.notes} onChange={e => setEditing({...editing, notes: e.target.value})}/>
+          <button onClick={saveInvoice}>Save & Generate</button>
+          <button onClick={() => setEditing(null)}>Cancel</button>
+        </div>
+      );
+
+      return (
+        <div className="container">
+          <h1>Voice Actor Invoice Generator</h1>
+          <p>Welcome, {user.email}</p>
+          <button onClick={startInvoice}>+ New Invoice</button>
+          <button onClick={signOut}>Logout</button>
+          {showUpgrade && (
+            <div style={{padding:"20px", background:"#ffe", margin:"16px 0"}}>
+              <h3>Upgrade to Pro for unlimited invoices</h3>
+              <button onClick={upgradeToPro}>Upgrade</button>
+            </div>
+          )}
+          <h2>Your Invoices</h2>
+          <ul>
+            {invoices.map(inv => (
+              <li key={inv.id}>
+                {inv.client_name} | {inv.project} | ${inv.rate * inv.hours + inv.extras}
+                <button onClick={() => generatePDF(inv)}>Print PDF</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById("root"));
+  </script>
+
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
+</body>
+</html>
