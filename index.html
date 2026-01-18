@@ -1,211 +1,569 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Voice Actor Invoice Generator</title>
-  <!-- React & ReactDOM -->
-  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; background: #f9f9f9; margin: 0; padding: 0; }
-    .container { max-width: 900px; margin: 40px auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    h1,h2,h3 { color: #333; }
-    input, select, textarea { width: 100%; padding: 8px; margin: 4px 0 12px; border: 1px solid #ccc; border-radius: 4px; }
-    button { padding: 10px 16px; border: none; border-radius: 4px; background: #4f46e5; color: white; cursor: pointer; }
-    button:hover { background: #4338ca; }
-    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-    th, td { padding: 8px; border: 1px solid #ddd; }
-    th { background: #4f46e5; color: white; }
-    .totals { text-align: right; margin-top: 16px; }
-  </style>
-</head>
-<body>
-  <div id="root"></div>
+import React, { useState } from 'react';
+import { Download, Plus, X, Copy, RotateCcw } from 'lucide-react';
 
-  <script type="text/babel">
+const VOInvoiceGenerator = () => {
+  const today = new Date().toISOString().split('T')[0];
+  const defaultDueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    const { useState, useEffect } = React;
+  // Initial state with default values
+  const [invoice, setInvoice] = useState({
+    invoiceNumber: 'INV-001',
+    date: today,
+    dueDate: defaultDueDate,
+    clientName: '',
+    clientAddress: '',
+    projectName: '',
+    talentName: '',
+    talentAddress: '',
+    
+    // VO-specific toggles
+    usageRights: {
+      enabled: false,
+      web: false,
+      tv: false,
+      radio: false,
+      internal: false,
+      social: false,
+      broadcast: false
+    },
+    buyout: {
+      enabled: false,
+      amount: 0
+    },
+    splitBilling: {
+      enabled: false,
+      splits: [{ name: '', amount: 0 }]
+    },
+    latePaymentNote: false,
+    usageActivationNote: false,
+    
+    // Custom line items
+    lineItems: [{ label: 'Voice-Over Recording', amount: 0 }],
+    
+    // Notes section
+    notes: 'Payment due within 30 days.\nPlease make checks payable to the talent name above.\nThank you for your business!'
+  });
 
-    // ====== CHANGE THESE WITH YOUR REAL SUPABASE KEYS ======
-    const SUPABASE_URL = "https://your-supabase-url.supabase.co";
-    const SUPABASE_ANON_KEY = "your-anon-key";
-    // ========================================================
+  // Update basic field
+  const updateField = (field, value) => {
+    setInvoice(prev => ({ ...prev, [field]: value }));
+  };
 
-    // Load Supabase
-    const { createClient } = supabase;
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // Toggle usage right
+  const toggleUsageRight = (right) => {
+    setInvoice(prev => ({
+      ...prev,
+      usageRights: {
+        ...prev.usageRights,
+        [right]: !prev.usageRights[right]
+      }
+    }));
+  };
 
-    function App() {
-      const [user, setUser] = useState(null);
-      const [email, setEmail] = useState("");
-      const [password, setPassword] = useState("");
-      const [invoices, setInvoices] = useState([]);
-      const [editing, setEditing] = useState(null);
-      const [showUpgrade, setShowUpgrade] = useState(false);
+  // Add line item
+  const addLineItem = () => {
+    setInvoice(prev => ({
+      ...prev,
+      lineItems: [...prev.lineItems, { label: '', amount: 0 }]
+    }));
+  };
 
-      // Auth listener
-      useEffect(() => {
-        const session = supabaseClient.auth.session();
-        setUser(session?.user ?? null);
-      }, []);
+  // Update line item
+  const updateLineItem = (index, field, value) => {
+    setInvoice(prev => ({
+      ...prev,
+      lineItems: prev.lineItems.map((item, i) => 
+        i === index ? { ...item, [field]: value } : item
+      )
+    }));
+  };
 
-      // Fetch invoices
-      const fetchInvoices = async () => {
-        if (!user) return;
-        const { data, error } = await supabaseClient
-          .from("invoices")
-          .select("*")
-          .eq("user_id", user.id);
-        if (error) console.log(error);
-        else setInvoices(data);
-      };
+  // Remove line item
+  const removeLineItem = (index) => {
+    if (invoice.lineItems.length > 1) {
+      setInvoice(prev => ({
+        ...prev,
+        lineItems: prev.lineItems.filter((_, i) => i !== index)
+      }));
+    }
+  };
 
-      useEffect(() => {
-        if (user) fetchInvoices();
-      }, [user]);
+  // Add split
+  const addSplit = () => {
+    setInvoice(prev => ({
+      ...prev,
+      splitBilling: {
+        ...prev.splitBilling,
+        splits: [...prev.splitBilling.splits, { name: '', amount: 0 }]
+      }
+    }));
+  };
 
-      // ===== Authentication =====
-      const signUp = async () => {
-        const { user: u, error } = await supabaseClient.auth.signUp({ email, password });
-        if (error) return alert(error.message);
-        setUser(u);
-        setEmail(""); setPassword("");
-        alert("Sign up successful!");
-      };
+  // Update split
+  const updateSplit = (index, field, value) => {
+    setInvoice(prev => ({
+      ...prev,
+      splitBilling: {
+        ...prev.splitBilling,
+        splits: prev.splitBilling.splits.map((split, i) => 
+          i === index ? { ...split, [field]: value } : split
+        )
+      }
+    }));
+  };
 
-      const signIn = async () => {
-        const { user: u, error } = await supabaseClient.auth.signIn({ email, password });
-        if (error) return alert(error.message);
-        setUser(u);
-        setEmail(""); setPassword("");
-      };
+  // Remove split
+  const removeSplit = (index) => {
+    if (invoice.splitBilling.splits.length > 1) {
+      setInvoice(prev => ({
+        ...prev,
+        splitBilling: {
+          ...prev.splitBilling,
+          splits: prev.splitBilling.splits.filter((_, i) => i !== index)
+        }
+      }));
+    }
+  };
 
-      const signOut = async () => {
-        await supabaseClient.auth.signOut();
-        setUser(null);
-        setInvoices([]);
-      };
+  // Calculate totals
+  const calculateSubtotal = () => {
+    const lineItemsTotal = invoice.lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+    const buyoutTotal = invoice.buyout.enabled ? (parseFloat(invoice.buyout.amount) || 0) : 0;
+    return lineItemsTotal + buyoutTotal;
+  };
 
-      // ===== Invoice Functions =====
-      const startInvoice = () => {
-        // Free users can only create 2 invoices
-        if (!user.is_pro && invoices.length >= 2) { setShowUpgrade(true); return; }
+  const subtotal = calculateSubtotal();
 
-        setEditing({
-          id: Date.now(),
-          client_name: "",
-          client_email: "",
-          project: "",
-          rate: 0,
-          hours: 0,
-          extras: 0,
-          notes: "",
-          date: new Date().toISOString().split("T")[0]
-        });
-      };
+  // Duplicate invoice
+  const duplicateInvoice = () => {
+    const newNumber = `INV-${String(parseInt(invoice.invoiceNumber.split('-')[1]) + 1).padStart(3, '0')}`;
+    setInvoice(prev => ({
+      ...prev,
+      invoiceNumber: newNumber,
+      date: today,
+      dueDate: defaultDueDate
+    }));
+  };
 
-      const saveInvoice = async () => {
-        if (!editing) return;
-        const { data, error } = await supabaseClient
-          .from("invoices")
-          .insert([{ ...editing, user_id: user.id }]);
-        if (error) return alert(error.message);
-        setInvoices([...invoices, data[0]]);
-        setEditing(null);
-        alert("Invoice saved!");
-      };
+  // Reset invoice
+  const resetInvoice = () => {
+    if (confirm('Are you sure you want to reset the invoice? This cannot be undone.')) {
+      setInvoice({
+        invoiceNumber: 'INV-001',
+        date: today,
+        dueDate: defaultDueDate,
+        clientName: '',
+        clientAddress: '',
+        projectName: '',
+        talentName: '',
+        talentAddress: '',
+        usageRights: {
+          enabled: false,
+          web: false,
+          tv: false,
+          radio: false,
+          internal: false,
+          social: false,
+          broadcast: false
+        },
+        buyout: {
+          enabled: false,
+          amount: 0
+        },
+        splitBilling: {
+          enabled: false,
+          splits: [{ name: '', amount: 0 }]
+        },
+        latePaymentNote: false,
+        usageActivationNote: false,
+        lineItems: [{ label: 'Voice-Over Recording', amount: 0 }],
+        notes: 'Payment due within 30 days.\nPlease make checks payable to the talent name above.\nThank you for your business!'
+      });
+    }
+  };
 
-      const generatePDF = (invoice) => {
-        const win = window.open("", "", "width=800,height=600");
-        win.document.write(`
-          <html>
-          <head><title>Invoice</title></head>
-          <body>
-            <h1>Invoice for Voice Actor</h1>
-            <p><strong>Date:</strong> ${invoice.date}</p>
-            <p><strong>Client:</strong> ${invoice.client_name} (${invoice.client_email})</p>
-            <p><strong>Project:</strong> ${invoice.project}</p>
-            <table>
-              <thead><tr><th>Item</th><th>Amount</th></tr></thead>
-              <tbody>
-                <tr><td>Rate x Hours</td><td>$${invoice.rate * invoice.hours}</td></tr>
-                <tr><td>Extras</td><td>$${invoice.extras}</td></tr>
-              </tbody>
-            </table>
-            <h3>Total: $${invoice.rate * invoice.hours + invoice.extras}</h3>
-            ${invoice.notes ? `<p><strong>Notes:</strong> ${invoice.notes}</p>` : ""}
-          </body>
-          </html>
-        `);
-        win.document.close();
-        setTimeout(() => win.print(), 250);
-      };
+  // Generate PDF (using print functionality)
+  const generatePDF = () => {
+    window.print();
+  };
 
-      // ===== Upgrade =====
-      const upgradeToPro = async () => {
-        // This would normally integrate with LemonSqueezy or Stripe
-        alert("Pro activated!");
-        setUser({ ...user, is_pro: true });
-        setShowUpgrade(false);
-      };
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-8">
+      {/* Action Buttons - Hidden in print */}
+      <div className="max-w-4xl mx-auto mb-6 flex flex-wrap gap-3 print:hidden">
+        <button
+          onClick={generatePDF}
+          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+        >
+          <Download size={18} />
+          Download PDF
+        </button>
+        <button
+          onClick={duplicateInvoice}
+          className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+        >
+          <Copy size={18} />
+          Duplicate
+        </button>
+        <button
+          onClick={resetInvoice}
+          className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition"
+        >
+          <RotateCcw size={18} />
+          Reset
+        </button>
+      </div>
 
-      // ====== UI ======
-      if (!user) return (
-        <div className="container">
-          <h1>Voice Actor Invoice Generator</h1>
-          <input placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
-          <input placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} />
-          <button onClick={signIn}>Login</button>
-          <button onClick={signUp}>Sign Up</button>
+      {/* Invoice Container */}
+      <div className="max-w-4xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-8">
+          <h1 className="text-4xl font-bold mb-2">INVOICE</h1>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div>
+              <label className="block text-blue-100 text-sm mb-1">Invoice Number</label>
+              <input
+                type="text"
+                value={invoice.invoiceNumber}
+                onChange={(e) => updateField('invoiceNumber', e.target.value)}
+                className="w-full px-3 py-2 rounded bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50"
+              />
+            </div>
+            <div>
+              <label className="block text-blue-100 text-sm mb-1">Date</label>
+              <input
+                type="date"
+                value={invoice.date}
+                onChange={(e) => updateField('date', e.target.value)}
+                className="w-full px-3 py-2 rounded bg-white/20 text-white border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50"
+              />
+            </div>
+          </div>
         </div>
-      );
 
-      if (editing) return (
-        <div className="container">
-          <h2>New Invoice</h2>
-          <input placeholder="Client Name" value={editing.client_name} onChange={e => setEditing({...editing, client_name: e.target.value})}/>
-          <input placeholder="Client Email" value={editing.client_email} onChange={e => setEditing({...editing, client_email: e.target.value})}/>
-          <input placeholder="Project" value={editing.project} onChange={e => setEditing({...editing, project: e.target.value})}/>
-          <input type="number" placeholder="Rate per hour" value={editing.rate} onChange={e => setEditing({...editing, rate: parseFloat(e.target.value) || 0})}/>
-          <input type="number" placeholder="Hours worked" value={editing.hours} onChange={e => setEditing({...editing, hours: parseFloat(e.target.value) || 0})}/>
-          <input type="number" placeholder="Extras" value={editing.extras} onChange={e => setEditing({...editing, extras: parseFloat(e.target.value) || 0})}/>
-          <textarea placeholder="Notes" value={editing.notes} onChange={e => setEditing({...editing, notes: e.target.value})}/>
-          <button onClick={saveInvoice}>Save & Generate</button>
-          <button onClick={() => setEditing(null)}>Cancel</button>
-        </div>
-      );
+        {/* Body */}
+        <div className="p-8">
+          {/* Talent & Client Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div>
+              <h3 className="font-semibold text-lg mb-3 text-gray-800">From (Talent)</h3>
+              <input
+                type="text"
+                placeholder="Your Name"
+                value={invoice.talentName}
+                onChange={(e) => updateField('talentName', e.target.value)}
+                className="w-full px-3 py-2 mb-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <textarea
+                placeholder="Your Address"
+                value={invoice.talentAddress}
+                onChange={(e) => updateField('talentAddress', e.target.value)}
+                rows="3"
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg mb-3 text-gray-800">Bill To (Client)</h3>
+              <input
+                type="text"
+                placeholder="Client Name"
+                value={invoice.clientName}
+                onChange={(e) => updateField('clientName', e.target.value)}
+                className="w-full px-3 py-2 mb-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <textarea
+                placeholder="Client Address"
+                value={invoice.clientAddress}
+                onChange={(e) => updateField('clientAddress', e.target.value)}
+                rows="3"
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
 
-      return (
-        <div className="container">
-          <h1>Voice Actor Invoice Generator</h1>
-          <p>Welcome, {user.email}</p>
-          <button onClick={startInvoice}>+ New Invoice</button>
-          <button onClick={signOut}>Logout</button>
-          {showUpgrade && (
-            <div style={{padding:"20px", background:"#ffe", margin:"16px 0"}}>
-              <h3>Upgrade to Pro for unlimited invoices</h3>
-              <button onClick={upgradeToPro}>Upgrade</button>
+          {/* Project & Due Date */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div>
+              <label className="block font-semibold mb-2 text-gray-700">Project Name</label>
+              <input
+                type="text"
+                placeholder="e.g., Commercial - Product Launch"
+                value={invoice.projectName}
+                onChange={(e) => updateField('projectName', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold mb-2 text-gray-700">Due Date</label>
+              <input
+                type="date"
+                value={invoice.dueDate}
+                onChange={(e) => updateField('dueDate', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* VO-Specific Toggles */}
+          <div className="mb-8 p-6 bg-blue-50 rounded-lg">
+            <h3 className="font-semibold text-lg mb-4 text-gray-800">Voice-Over Specific Options</h3>
+            
+            {/* Usage Rights */}
+            <div className="mb-4">
+              <label className="flex items-center gap-2 mb-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={invoice.usageRights.enabled}
+                  onChange={(e) => setInvoice(prev => ({
+                    ...prev,
+                    usageRights: { ...prev.usageRights, enabled: e.target.checked }
+                  }))}
+                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="font-semibold">Usage Rights Included</span>
+              </label>
+              
+              {invoice.usageRights.enabled && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 ml-7">
+                  {['web', 'tv', 'radio', 'internal', 'social', 'broadcast'].map(right => (
+                    <label key={right} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={invoice.usageRights[right]}
+                        onChange={() => toggleUsageRight(right)}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="capitalize text-sm">{right}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Buyout */}
+            <div className="mb-4">
+              <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={invoice.buyout.enabled}
+                  onChange={(e) => setInvoice(prev => ({
+                    ...prev,
+                    buyout: { ...prev.buyout, enabled: e.target.checked }
+                  }))}
+                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="font-semibold">Buyout</span>
+              </label>
+              
+              {invoice.buyout.enabled && (
+                <div className="ml-7">
+                  <input
+                    type="number"
+                    placeholder="Buyout amount"
+                    value={invoice.buyout.amount || ''}
+                    onChange={(e) => setInvoice(prev => ({
+                      ...prev,
+                      buyout: { ...prev.buyout, amount: e.target.value }
+                    }))}
+                    className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Split Billing */}
+            <div className="mb-4">
+              <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={invoice.splitBilling.enabled}
+                  onChange={(e) => setInvoice(prev => ({
+                    ...prev,
+                    splitBilling: { ...prev.splitBilling, enabled: e.target.checked }
+                  }))}
+                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="font-semibold">Split Billing</span>
+              </label>
+              
+              {invoice.splitBilling.enabled && (
+                <div className="ml-7 space-y-2">
+                  {invoice.splitBilling.splits.map((split, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Talent/Studio name"
+                        value={split.name}
+                        onChange={(e) => updateSplit(idx, 'name', e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="number"
+                        placeholder="Amount"
+                        value={split.amount || ''}
+                        onChange={(e) => updateSplit(idx, 'amount', e.target.value)}
+                        className="w-32 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      {invoice.splitBilling.splits.length > 1 && (
+                        <button
+                          onClick={() => removeSplit(idx)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          <X size={20} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    onClick={addSplit}
+                    className="text-blue-600 text-sm hover:underline"
+                  >
+                    + Add Split
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Notes Toggles */}
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={invoice.latePaymentNote}
+                  onChange={(e) => updateField('latePaymentNote', e.target.checked)}
+                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="font-semibold">Include Late Payment Terms</span>
+              </label>
+              
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={invoice.usageActivationNote}
+                  onChange={(e) => updateField('usageActivationNote', e.target.checked)}
+                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="font-semibold">Include Usage Activation Notice</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Line Items */}
+          <div className="mb-8">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold text-lg text-gray-800">Line Items</h3>
+              <button
+                onClick={addLineItem}
+                className="flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm"
+              >
+                <Plus size={16} />
+                Add Item
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              {invoice.lineItems.map((item, idx) => (
+                <div key={idx} className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Description"
+                    value={item.label}
+                    onChange={(e) => updateLineItem(idx, 'label', e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-600">$</span>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      value={item.amount || ''}
+                      onChange={(e) => updateLineItem(idx, 'amount', e.target.value)}
+                      className="w-32 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  {invoice.lineItems.length > 1 && (
+                    <button
+                      onClick={() => removeLineItem(idx)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded"
+                    >
+                      <X size={20} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Total */}
+          <div className="mb-8 flex justify-end">
+            <div className="w-full md:w-64">
+              <div className="flex justify-between py-2 text-lg font-semibold border-t-2 border-gray-800">
+                <span>TOTAL:</span>
+                <span>${subtotal.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Split Billing Display */}
+          {invoice.splitBilling.enabled && invoice.splitBilling.splits.some(s => s.name) && (
+            <div className="mb-8 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+              <h4 className="font-semibold mb-2 text-gray-800">Payment Split:</h4>
+              {invoice.splitBilling.splits.map((split, idx) => (
+                split.name && (
+                  <div key={idx} className="flex justify-between text-sm">
+                    <span>{split.name}</span>
+                    <span className="font-semibold">${parseFloat(split.amount || 0).toFixed(2)}</span>
+                  </div>
+                )
+              ))}
             </div>
           )}
-          <h2>Your Invoices</h2>
-          <ul>
-            {invoices.map(inv => (
-              <li key={inv.id}>
-                {inv.client_name} | {inv.project} | ${inv.rate * inv.hours + inv.extras}
-                <button onClick={() => generatePDF(inv)}>Print PDF</button>
-              </li>
-            ))}
-          </ul>
+
+          {/* Notes Section */}
+          <div className="mb-8">
+            <h3 className="font-semibold text-lg mb-3 text-gray-800">Notes & Terms</h3>
+            <textarea
+              value={invoice.notes}
+              onChange={(e) => updateField('notes', e.target.value)}
+              rows="5"
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            
+            {/* Conditional Notes */}
+            {invoice.latePaymentNote && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-sm">
+                <strong>Late Payment:</strong> A fee of 1.5% per month will be charged on overdue balances.
+              </div>
+            )}
+            
+            {invoice.usageActivationNote && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
+                <strong>Usage Activation:</strong> Usage rights become active upon full payment receipt.
+              </div>
+            )}
+          </div>
         </div>
-      );
-    }
 
-    ReactDOM.render(<App />, document.getElementById("root"));
-  </script>
+        {/* Footer */}
+        <div className="bg-gray-100 p-6 text-center text-sm text-gray-600">
+          Thank you for your business!
+        </div>
+      </div>
 
-  <!-- Supabase CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
-</body>
-</html>
+      {/* Print Styles */}
+      <style>{`
+        @media print {
+          body {
+            margin: 0;
+            padding: 0;
+          }
+          .print\\:hidden {
+            display: none !important;
+          }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default VOInvoiceGenerator;
